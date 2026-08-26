@@ -66,7 +66,7 @@ export class RouterOsClient {
   }
 
   async execute(command: string, params: Record<string, string> = {}) {
-    try { await this.connect(); await this.request(["/login", `=name=${this.config.username}`, `=password=${this.config.password}`]); const words = [command, ...Object.entries(params).map(([key, value]) => `=${key}=${value}`)]; return (await this.request(words)).filter((reply) => reply.type === "!re").map((reply) => reply.data); }
+    try { await this.connect(); await this.request(["/login", `=name=${this.config.username}`, `=password=${this.config.password}`]); const words = [command, ...Object.entries(params).map(([key, value]) => `=${key}=${value}`)]; return (await this.request(words)).filter((reply) => reply.type === "!re" || (reply.type === "!done" && Boolean(reply.data.ret))).map((reply) => reply.data); }
     finally { this.socket?.destroy(); this.socket = undefined; }
   }
 
