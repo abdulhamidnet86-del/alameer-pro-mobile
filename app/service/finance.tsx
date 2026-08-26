@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
-import { Alert, FlatList, Modal, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useState } from "react";
+import { Alert, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { PowerMenu } from "@/components/power-menu";
 import { useColors } from "@/hooks/use-colors";
@@ -9,6 +9,7 @@ import { useThemeContext } from "@/lib/theme-provider";
 import { useRouterConnection } from "@/lib/router-context";
 import { trpc } from "@/lib/trpc";
 import * as Sharing from "expo-sharing";
+import * as Print from "expo-print";
 import * as FileSystem from "expo-file-system/legacy";
 
 export default function FinanceScreen() {
@@ -27,6 +28,18 @@ export default function FinanceScreen() {
   const filterLabel = (key: "profile" | "nas" | "status") => key === "profile" ? (filters.profile || "كل الباقات") : key === "nas" ? (filters.nas || "كل الأجهزة") : filters.status === "approved" ? "المعاملات المعتمدة" : filters.status || "كل الحالات";
   const refresh = () => { if (connection) financeQuery.refetch(); else Alert.alert("الاتصال مطلوب", "أدخل بيانات الراوتر واختبر الاتصال أولًا."); };
 
+  const exportPDF = async () => {
+    if (!data) return Alert.alert("البيانات غير متاحة", "اتصل بالراوتر ثم نفّذ المزامنة قبل إنشاء التقرير.");
+    const rows = data.rows.map((row) => `<tr><td>${escapeHtml(row.package)}</td><td>${row.cards}</td><td>${row.value} ${escapeHtml(data.currency || "")}</td></tr>`).join("");
+    const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><style>@page{size:A4;margin:28px 24px}body{font-family:Arial,Tahoma,sans-serif;color:#102A62;direction:rtl;background:#fff}h1{color:#1255D6;text-align:center;margin:0 0 4px;font-size:24px}h2{text-align:center;color:#D52239;font-size:13px;margin:0 0 22px}p.meta{text-align:center;color:#71829F;font-size:11px;margin-bottom:18px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:22px}.stat{border:1px solid #D1DCEB;border-radius:10px;padding:10px;text-align:center;background:#F8FAFF}.label{display:block;color:#71829F;font-size:10px}.value{display:block;color:#1255D6;font-size:17px;font-weight:bold;margin-top:4px}table{width:100%;border-collapse:collapse;border:1px solid #D1DCEB;border-radius:10px;overflow:hidden}th{background:#1255D6;color:#fff;padding:10px;font-size:12px}td{padding:9px;text-align:center;border-bottom:1px solid #E8EEF7;font-size:11px}tr:nth-child(even) td{background:#F8FAFF}.total td{background:#EEF4FF!important;color:#1255D6;font-weight:bold}.footer{text-align:center;color:#71829F;font-size:10px;margin-top:25px}</style></head><body><h1>تقرير الحسابات المالية</h1><h2>ALAMEER PRO</h2><p class="meta">الراوتر: ${escapeHtml(connection?.host || "غير محدد")} — تاريخ الإنشاء: ${new Date().toLocaleString("ar-YE")}</p><div class="grid"><div class="stat"><span class="label">إجمالي الكروت</span><span class="value">${data.totals.totalCards}</span></div><div class="stat"><span class="label">الكروت المباعة</span><span class="value">${data.totals.soldCards}</span></div><div class="stat"><span class="label">الكروت المنتهية</span><span class="value">${data.totals.expiredCards}</span></div><div class="stat"><span class="label">إجمالي البيع</span><span class="value">${data.totals.revenue} ${escapeHtml(data.currency || "")}</span></div><div class="stat"><span class="label">المعاملات المعتمدة</span><span class="value">${data.totals.approvedPayments}</span></div><div class="stat"><span class="label">الجلسات</span><span class="value">${data.totals.sessions}</span></div></div><table><thead><tr><th>الباقة</th><th>عدد الكروت</th><th>القيمة</th></tr></thead><tbody>${rows || `<tr><td colspan="3">لا توجد بيانات ضمن الفلاتر الحالية</td></tr>`}</tbody><tfoot><tr class="total"><td>الإجمالي</td><td>${data.totals.totalCards}</td><td>${data.totals.revenue} ${escapeHtml(data.currency || "")}</td></tr></tfoot></table><p class="footer">تم إنشاء التقرير من بيانات RouterOS/User Manager الحالية — لا يمثل أي بيانات غير متزامنة.</p></body></html>`;
+    try {
+      if (Platform.OS === "web") return await Print.printAsync({ html });
+      const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842, margins: { top: 24, bottom: 24, left: 24, right: 24 } });
+      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: "تقرير الحسابات المالية" });
+      else Alert.alert("تم إنشاء التقرير", "تم إنشاء ملف PDF لكن المشاركة غير متاحة على هذا الجهاز.");
+    } catch { Alert.alert("فشل إنشاء التقرير", "تعذر إنشاء ملف PDF. حاول تحديث البيانات ثم أعد المحاولة."); }
+  };
+
   const exportCSV = async () => {
     if (!data || data.rows.length === 0) return Alert.alert("لا توجد بيانات", "لا توجد سجلات مالية لتصديرها حاليًا.");
     try {
@@ -40,7 +53,7 @@ export default function FinanceScreen() {
       } else {
         Alert.alert("المشاركة غير متاحة", "تعذر فتح واجهة المشاركة على هذا الجهاز.");
       }
-    } catch (error) {
+    } catch {
       Alert.alert("فشل التصدير", "حدث خطأ أثناء تجهيز ملف CSV.");
     }
   };
@@ -59,7 +72,7 @@ export default function FinanceScreen() {
         <View style={styles.filterRow}><FilterSelect label={filterLabel("profile")} icon="layers-triple" onPress={() => setFilterModal("profile")} /><FilterSelect label={filterLabel("nas")} icon="router-wireless" onPress={() => setFilterModal("nas")} /></View>
         <FilterSelect label="كل نقاط البيع" icon="storefront-outline" full />
         <FilterSelect label={filterLabel("status")} icon="filter-variant" full onPress={() => setFilterModal("status")} />
-        <View style={styles.filterActions}><TouchableOpacity style={styles.viewBtn} onPress={refresh}><MaterialCommunityIcons name="eye-outline" size={24} color="white" /></TouchableOpacity><TouchableOpacity style={styles.pdfBtn} onPress={exportCSV}><MaterialCommunityIcons name="file-pdf-box" size={22} color="#102A62" /><Text style={styles.pdfText}>تصدير التقرير</Text></TouchableOpacity><TouchableOpacity style={styles.clearBtn} onPress={() => setFilters({ fromDate: "", toDate: "", profile: "", nas: "", status: "approved" })}><MaterialCommunityIcons name="close" size={22} color="#102A62" /></TouchableOpacity></View>
+        <View style={styles.filterActions}><TouchableOpacity style={styles.viewBtn} onPress={refresh}><MaterialCommunityIcons name="eye-outline" size={24} color="white" /></TouchableOpacity><TouchableOpacity style={styles.pdfBtn} onPress={exportPDF}><MaterialCommunityIcons name="file-pdf-box" size={22} color="#102A62" /><Text style={styles.pdfText}>تقرير PDF عربي</Text></TouchableOpacity><TouchableOpacity style={styles.clearBtn} onPress={() => setFilters({ fromDate: "", toDate: "", profile: "", nas: "", status: "approved" })}><MaterialCommunityIcons name="close" size={22} color="#102A62" /></TouchableOpacity></View>
       </View>
 
       <View style={styles.statsGrid}>
@@ -84,6 +97,7 @@ export default function FinanceScreen() {
   </ScreenContainer>;
 }
 
+function escapeHtml(value: string) { return value.replace(/[&<>\"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&#39;" })[char] ?? char); }
 function DateFilter({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <View style={styles.filterItem}><TextInput value={value} onChangeText={onChange} placeholder="DD/MM/YYYY" placeholderTextColor="#9AA9BF" style={styles.filterVal} keyboardType="numbers-and-punctuation" textAlign="left" /><MaterialCommunityIcons name="calendar-range" size={20} color="#102A62" /><Text style={styles.filterLabel}>{label}</Text></View>; }
 function FilterSelect({ label, icon, full, onPress }: { label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap; full?: boolean; onPress?: () => void }) { return <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={[styles.filterSelect, full && { width: "100%" }]}><MaterialCommunityIcons name="chevron-down" size={18} color="#102A62" /><Text style={styles.selectText}>{label}</Text><MaterialCommunityIcons name={icon} size={20} color="#124CC0" /></TouchableOpacity>; }
 function StatCard({ label, value, icon, color, success, error, warning }: { label: string; value: string; icon: keyof typeof MaterialCommunityIcons.glyphMap; color: string; success?: boolean; error?: boolean; warning?: boolean }) { return <View style={styles.statCard}><View style={styles.statInfo}><Text style={styles.statLabel}>{label}</Text><Text style={[styles.statValue, { color: success ? "#18A957" : error ? "#D52239" : "#1255D6" }]}>{value}</Text></View><View style={[styles.statIconWrap, { backgroundColor: success ? "#EDF9F0" : error ? "#FFF0F2" : warning ? "#FFF8E5" : "#EEF4FF" }]}><MaterialCommunityIcons name={icon} size={22} color={color} /></View></View>; }
