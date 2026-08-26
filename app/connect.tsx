@@ -4,9 +4,11 @@ import { useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { trpc } from "@/lib/trpc";
+import { useRouterConnection } from "@/lib/router-context";
 import { loadSavedRouters, saveSavedRouters } from "@/lib/router-storage";
 
 export default function ConnectScreen() {
+  const { setConnection } = useRouterConnection();
   const [secure, setSecure] = useState(true);
   const [name, setName] = useState("");
   const [host, setHost] = useState("");
@@ -14,7 +16,7 @@ export default function ConnectScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState("لم يتم اختبار الاتصال بعد");
-  const testConnection = trpc.routeros.status.useMutation({ onSuccess: async (resource) => { const connection = { id: `${host.trim()}:${Number(port) || (secure ? 8729 : 8728)}`, name: name.trim() || host.trim(), host: host.trim(), port: Number(port) || (secure ? 8729 : 8728), username: username.trim(), password, tls: secure }; const saved = await loadSavedRouters(); await saveSavedRouters([...saved.filter((item) => item.id !== connection.id), connection]); setStatus(`تم الاتصال والحفظ — RouterOS ${resource.version ?? ""}`); }, onError: (error) => setStatus(formatConnectionError(error.message)) });
+  const testConnection = trpc.routeros.status.useMutation({ onSuccess: async (resource) => { const connection = { id: `${host.trim()}:${Number(port) || (secure ? 8729 : 8728)}`, name: name.trim() || host.trim(), host: host.trim(), port: Number(port) || (secure ? 8729 : 8728), username: username.trim(), password, tls: secure }; setConnection(connection); const saved = await loadSavedRouters(); await saveSavedRouters([...saved.filter((item) => item.id !== connection.id), connection]); setStatus(`تم الاتصال والحفظ — RouterOS ${resource.version ?? ""}`); }, onError: (error) => setStatus(formatConnectionError(error.message)) });
   const handleTest = () => { const normalizedHost = host.trim(); const normalizedUsername = username.trim(); const normalizedPort = Number(port); if (!normalizedHost) return setStatus("أدخل عنوان IP أو اسم النطاق الخاص بالراوتر."); if (!normalizedUsername) return setStatus("أدخل اسم مستخدم RouterOS المصرح له بالوصول إلى API."); if (!password) return setStatus("أدخل كلمة المرور حتى يمكن إنشاء جلسة آمنة."); if (!Number.isInteger(normalizedPort) || normalizedPort < 1 || normalizedPort > 65535) return setStatus("المنفذ غير صحيح. استخدم 8728 للاتصال العادي أو 8729 للاتصال الآمن."); setStatus("جارٍ الاتصال بالراوتر..."); testConnection.mutate({ host: normalizedHost, port: normalizedPort, username: normalizedUsername, password, tls: secure }); };
   return <ScreenContainer edges={["top", "left", "right", "bottom"]} containerClassName="bg-[#F8FAFF]" className="px-4">
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">

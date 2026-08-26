@@ -12,6 +12,7 @@ const resourcePaths = {
 const resourceSchema = z.enum(["usermanager.users", "usermanager.profiles", "usermanager.sessions", "hotspot.users", "hotspot.active", "hotspot.profiles"]);
 const connectionSchema = z.object({ host: z.string().min(1).max(255), port: z.number().int().min(1).max(65535), username: z.string().min(1).max(128), password: z.string().max(256), tls: z.boolean() });
 const paramsSchema = z.record(z.string(), z.string()).refine((params) => Object.keys(params).every((key) => !key.startsWith(".")), "Reserved RouterOS parameters are not allowed");
+const powerSchema = z.enum(["reboot", "shutdown"]);
 type Resource = z.infer<typeof resourceSchema>;
 function pathFor(resource: Resource) { const [domain, key] = resource.split(".") as [keyof typeof resourcePaths, string]; return resourcePaths[domain][key as keyof typeof resourcePaths[typeof domain]]; }
 function client(connection?: z.infer<typeof connectionSchema>) { return new RouterOsClient(connection); }
@@ -25,6 +26,7 @@ export const appRouter = router({
     add: publicProcedure.input(z.object({ connection: connectionSchema, resource: resourceSchema, params: paramsSchema })).mutation(({ input }) => client(input.connection).add(pathFor(input.resource), input.params)),
     update: publicProcedure.input(z.object({ connection: connectionSchema, resource: resourceSchema, id: z.string().min(1).max(100), params: paramsSchema })).mutation(({ input }) => client(input.connection).set(pathFor(input.resource), input.id, input.params)),
     remove: publicProcedure.input(z.object({ connection: connectionSchema, resource: resourceSchema, id: z.string().min(1).max(100) })).mutation(({ input }) => client(input.connection).remove(pathFor(input.resource), input.id)),
+    power: publicProcedure.input(z.object({ connection: connectionSchema, action: powerSchema })).mutation(({ input }) => client(input.connection).execute(input.action === "reboot" ? "/system/reboot" : "/system/shutdown")),
   }),
 });
 

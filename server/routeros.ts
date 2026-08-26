@@ -41,7 +41,9 @@ export class RouterOsClient {
   private async connect() {
     if (!this.config.host || !this.config.username || !this.config.password) throw new Error("RouterOS connection is not configured");
     this.socket = await new Promise<SocketLike>((resolve, reject) => {
-      const socket = this.config.tls ? tls.connect({ host: this.config.host, port: this.config.port, rejectUnauthorized: false }, () => resolve(socket)) : net.createConnection({ host: this.config.host, port: this.config.port }, () => resolve(socket));
+      const onConnected = () => { socket.setTimeout(0); resolve(socket); };
+      const socket = this.config.tls ? tls.connect({ host: this.config.host, port: this.config.port, rejectUnauthorized: false }, onConnected) : net.createConnection({ host: this.config.host, port: this.config.port }, onConnected);
+      socket.setTimeout(this.timeoutMs, () => socket.destroy(new Error("RouterOS connection timed out")));
       socket.once("error", reject);
     });
   }
