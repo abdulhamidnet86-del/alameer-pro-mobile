@@ -16,6 +16,10 @@ const powerSchema = z.enum(["reboot", "shutdown"]);
 const packageSchema = z.object({ name: z.string().min(1).max(64), nameForUsers: z.string().max(64).optional(), price: z.string().max(32), validity: z.string().max(32), startsWhen: z.enum(["assigned", "first-auth"]).default("assigned"), comment: z.string().max(255).optional(), downloadLimit: z.string().max(32).optional(), uploadLimit: z.string().max(32).optional(), transferLimit: z.string().max(32).optional(), uptimeLimit: z.string().max(32).optional(), limitationName: z.string().max(80).optional() });
 const packageUpdateSchema = packageSchema.extend({ profileId: z.string().min(1).max(100), limitationId: z.string().min(1).max(100), originalName: z.string().min(1).max(64), originalLimitationName: z.string().min(1).max(80) });
 type Resource = z.infer<typeof resourceSchema>;
+const financeFiltersSchema = z.object({ connection: connectionSchema, fromDate: z.string().optional(), toDate: z.string().optional(), profile: z.string().optional(), nas: z.string().optional(), status: z.string().optional() });
+function parseRouterDate(value?: string) { if (!value) return undefined; const timestamp = Date.parse(value); if (Number.isFinite(timestamp)) return timestamp; const match = value.match(/^(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{4})/); return match ? Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1])) : undefined; }
+function inDateRange(value: string | undefined, from?: string, to?: string) { const timestamp = parseRouterDate(value); if (timestamp === undefined) return !from && !to; const start = from ? parseRouterDate(from) : undefined; const end = to ? parseRouterDate(`${to}T23:59:59`) ?? parseRouterDate(to) : undefined; return (start === undefined || timestamp >= start) && (end === undefined || timestamp <= end); }
+function toAmount(value?: string) { const amount = Number(value ?? 0); return Number.isFinite(amount) ? amount : 0; }
 function pathFor(resource: Resource) { const [domain, key] = resource.split(".") as [keyof typeof resourcePaths, string]; return resourcePaths[domain][key as keyof typeof resourcePaths[typeof domain]]; }
 function client(connection?: z.infer<typeof connectionSchema>) { return new RouterOsClient(connection); }
 
@@ -29,6 +33,31 @@ export const appRouter = router({
     update: publicProcedure.input(z.object({ connection: connectionSchema, resource: resourceSchema, id: z.string().min(1).max(100), params: paramsSchema })).mutation(({ input }) => client(input.connection).set(pathFor(input.resource), input.id, input.params)),
     remove: publicProcedure.input(z.object({ connection: connectionSchema, resource: resourceSchema, id: z.string().min(1).max(100) })).mutation(({ input }) => client(input.connection).remove(pathFor(input.resource), input.id)),
     power: publicProcedure.input(z.object({ connection: connectionSchema, action: powerSchema })).mutation(({ input }) => client(input.connection).execute(input.action === "reboot" ? "/system/reboot" : "/system/shutdown")),
+    finance: router({
+      summary: publicProcedure.input(financeFiltersSchema).query(async ({ input }) => {
+        const api = client(input.connection);
+        const [payments, userProfiles, profiles, sessions] = await Promise.all([
+          api.print("/user-manager/payment", "profile,user,price,currency,trans-status,trans-start,trans-end,.id"),
+          api.print("/user-manager/user-profile", "user,profile,state,end-time,.id"),
+          api.print("/user-manager/profile", "name,price,.id"),
+          api.print("/user-manager/session", "user,nas-ip-address,started,ended,active,status,download,upload,.id"),
+        ]);
+        const filteredPayments = payments.filter((item) => (!input.profile || item.profile === input.profile) && (!input.status || item["trans-status"] === input.status) && inDateRange(item["trans-end"] || item["trans-start"], input.fromDate, input.toDate));
+        const filteredUserProfiles = userProfiles.filter((item) => (!input.profile || item.profile === input.profile));
+        const filteredSessions = sessions.filter((item) => (!input.nas || item["nas-ip-address"] === input.nas) && inDateRange(item.ended || item.started, input.fromDate, input.toDate));
+        const approvedPayments = filteredPayments.filter((item) => item["trans-status"] === "approved");
+        const expiredCards = filteredUserProfiles.filter((item) => item.state === "used").length;
+        const packageRows = profiles.filter((profile) => !input.profile || profile.name === input.profile).map((profile) => {
+          const profilePayments = approvedPayments.filter((payment) => payment.profile === profile.name);
+          const profileUsers = filteredUserProfiles.filter((item) => item.profile === profile.name);
+          return { package: profile.name ?? "", cards: profileUsers.length, value: profilePayments.reduce((sum, payment) => sum + toAmount(payment.price), 0), price: profile.price ?? "0" };
+        });
+        const totalRevenue = approvedPayments.reduce((sum, payment) => sum + toAmount(payment.price), 0);
+        const timestamps = [...filteredPayments.map((item) => item["trans-end"] || item["trans-start"]), ...filteredSessions.map((item) => item.ended || item.started)].filter(Boolean).map((value) => parseRouterDate(value)).filter((value): value is number => value !== undefined);
+        const nasValues = Array.from(new Set(filteredSessions.map((item) => item["nas-ip-address"]).filter(Boolean)));
+        return { lastSyncAt: new Date().toISOString(), currency: approvedPayments[0]?.currency ?? "", totals: { totalCards: filteredUserProfiles.length, soldCards: Math.max(filteredUserProfiles.length - expiredCards, 0), expiredCards, revenue: totalRevenue, expenses: null, profit: null, approvedPayments: approvedPayments.length, sessions: filteredSessions.length }, rows: packageRows, profiles: profiles.map((item) => item.name).filter((value): value is string => Boolean(value)), nasValues, latestRecordAt: timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : null, payments: filteredPayments.length };
+      }),
+    }),
     packages: router({
       list: publicProcedure.input(connectionSchema).query(async ({ input }) => {
         const api = client(input);
