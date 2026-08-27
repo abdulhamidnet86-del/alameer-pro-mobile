@@ -8,6 +8,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useThemeContext } from "@/lib/theme-provider";
 import { useRouterConnection } from "@/lib/router-context";
 import { trpc } from "@/lib/trpc";
+import { toArabicError } from "@/lib/arabic-errors";
 
 type EventKey = "dhcp" | "hotspot" | "backup" | "sales" | "netwatch" | "router" | "electricity";
 type ScheduleMode = "instant" | "hourly" | "threeHourly" | "daily" | "custom";
@@ -37,9 +38,9 @@ export default function TelegramScreen() {
   const fade = useState(() => new Animated.Value(0))[0];
   const settings = trpc.routeros.telegram.settings.useQuery(connection as any, { enabled: Boolean(connection), retry: false });
   const status = trpc.routeros.telegram.status.useQuery(undefined, { retry: false });
-  const saveSettings = trpc.routeros.telegram.saveSettings.useMutation({ onSuccess: (data) => { setBots(data.bots as Bot[]); setMonitoring(data.monitorEnabled); setMonitorInterval(data.monitorIntervalSeconds); Alert.alert("تم الحفظ", data.persisted ? "حُفظت إعدادات Telegram والفواصل على الخادم المشفر." : "تم الحفظ مؤقتًا؛ قاعدة البيانات غير متاحة الآن."); }, onError: (error) => Alert.alert("تعذر الحفظ", error.message || "تحقق من بيانات البوت.") });
+  const saveSettings = trpc.routeros.telegram.saveSettings.useMutation({ onSuccess: (data) => { setBots(data.bots as Bot[]); setMonitoring(data.monitorEnabled); setMonitorInterval(data.monitorIntervalSeconds); Alert.alert("تم الحفظ", data.persisted ? "حُفظت إعدادات Telegram والفواصل على الخادم المشفر." : "تم الحفظ مؤقتًا؛ قاعدة البيانات غير متاحة الآن."); }, onError: (error) => Alert.alert("تعذر الحفظ", toArabicError(error, "تحقق من بيانات البوت ثم أعد المحاولة.")) });
   const revealBot = trpc.routeros.telegram.revealBot.useMutation({ onSuccess: (data) => setRevealed((current) => ({ ...current, [data.id]: { token: data.token, chatId: data.chatId } })), onError: () => Alert.alert("تعذر العرض", "لم يتم العثور على البوت أو أن بيانات الاتصال غير صحيحة.") });
-  const botTest = trpc.routeros.telegram.botTest.useMutation({ onSuccess: () => Alert.alert("نجح الاختبار", "وصلت رسالة الاختبار إلى المحادثة المحددة."), onError: (error) => Alert.alert("تعذر الاختبار", error.message || "تحقق من التوكن والرمز.") });
+  const botTest = trpc.routeros.telegram.botTest.useMutation({ onSuccess: () => Alert.alert("نجح الاختبار", "وصلت رسالة الاختبار إلى المحادثة المحددة."), onError: (error) => Alert.alert("تعذر الاختبار", toArabicError(error, "تحقق من التوكن والرمز ثم أعد المحاولة.")) });
   const test = trpc.routeros.telegram.test.useMutation({ onSuccess: () => Alert.alert("تم الإرسال", "وصلت رسالة الاختبار إلى Telegram."), onError: () => Alert.alert("تعذر الإرسال", "تحقق من إعدادات البوت والمحادثة.") });
   const summary = trpc.routeros.telegram.notifyCurrent.useMutation({ onSuccess: (data) => Alert.alert("تمت المزامنة", `تم إرسال ${data.active} متصل و${data.enabledUsers} مستخدم User Manager.`), onError: () => Alert.alert("تعذر المزامنة", "اتصل بالراوتر أولًا وتحقق من صلاحيات القراءة.") });
   const eventTest = trpc.routeros.telegram.eventTest.useMutation({ onSuccess: () => Alert.alert("تم الإرسال", "تم إرسال تجربة الميزة إلى Telegram."), onError: () => Alert.alert("تعذر الإرسال", "تحقق من إعدادات Telegram ثم أعد المحاولة.") });

@@ -220,13 +220,13 @@ export default function OAuthCallback() {
         } else {
           console.error("[OAuth] No session token in result:", result);
           setStatus("error");
-          setErrorMessage("No session token received");
+          setErrorMessage("لم يتم استلام رمز الجلسة. أعد تسجيل الدخول ثم حاول مرة أخرى.");
         }
       } catch (error) {
         console.error("[OAuth] Callback error:", error);
         setStatus("error");
         setErrorMessage(
-          error instanceof Error ? error.message : "Failed to complete authentication",
+          "تعذر إكمال تسجيل الدخول. أعد المحاولة وتحقق من اتصال الشبكة.",
         );
       }
     };

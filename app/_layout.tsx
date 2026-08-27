@@ -11,6 +11,7 @@ import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { RouterProvider } from "@/lib/router-context";
+import { applyGlobalCairo } from "@/lib/global-cairo";
 import {
   SafeAreaFrameContext,
   SafeAreaInsetsContext,
@@ -89,6 +90,7 @@ export default function RootLayout() {
   }, [initialInsets, initialFrame]);
 
   if (!fontsLoaded) return null;
+  applyGlobalCairo();
 
   const content = (
     <GestureHandlerRootView style={{ flex: 1 }}>

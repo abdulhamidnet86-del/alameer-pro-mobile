@@ -7,6 +7,10 @@ type Sender = { address?: string; port?: number };
 export async function discoverMikroTik(): Promise<DiscoveredMikroTik[]> {
   return new Promise((resolve, reject) => {
     const devices = new Map<string, DiscoveredMikroTik>();
+    if (!UdpSockets || typeof UdpSockets.createSocket !== "function") {
+      reject(new Error("ميزة اكتشاف أجهزة MikroTik غير متاحة في هذه النسخة. أنشئ APK جديدًا ثم أعد المحاولة."));
+      return;
+    }
     const socket = UdpSockets.createSocket({ type: "udp4", reusePort: true });
     let settled = false;
     const end = (error?: Error) => {

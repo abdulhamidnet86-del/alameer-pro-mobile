@@ -12,6 +12,7 @@ import { loadSavedRouters, saveSavedRouters } from "@/lib/router-storage";
 import { useThemeContext } from "@/lib/theme-provider";
 import { testLocalRouterOs } from "@/lib/routeros-direct";
 import { discoverMikroTik, type DiscoveredMikroTik } from "@/lib/mikrotik-discovery";
+import { toArabicError } from "@/lib/arabic-errors";
 import { trpc } from "@/lib/trpc";
 
 type StatusTone = "neutral" | "success" | "error" | "working";
@@ -53,7 +54,7 @@ export default function ConnectScreen() {
       setDevices(found);
       if (!found.length) setStatus("لم يُعثر على MikroTik بعد. تأكد من اتصال الهاتف بالشبكة نفسها وتفعيل Neighbor Discovery في الراوتر.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "تعذر تشغيل اكتشاف MikroTik المحلي.");
+      setStatus(toArabicError(error, "تعذر تشغيل اكتشاف MikroTik المحلي."));
       setTone("error");
     } finally { setIsDiscovering(false); }
   }, []);
