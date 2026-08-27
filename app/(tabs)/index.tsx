@@ -9,6 +9,7 @@ import { trpc } from "@/lib/trpc";
 import { useColors } from "@/hooks/use-colors";
 
 const services = [
+  { title: "لوحة التحكم", icon: "view-dashboard-outline", color: "#1557D8", route: "/service/dashboard" },
   { title: "نظام اليوزرمنجر", icon: "account-group-outline", color: "#0B63E5", route: "/service/usermanager" },
   { title: "نظام الهوتسبوت", icon: "wifi", color: "#1677E8", route: "/service/hotspot" },
   { title: "المصروفات", icon: "file-document-outline", color: "#E21C35", route: "/service/expenses" },
