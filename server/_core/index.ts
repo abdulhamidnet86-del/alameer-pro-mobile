@@ -5,7 +5,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
-import { appRouter } from "../routers";
+import { appRouter, hydratePersistedTelegramMonitors } from "../routers";
 import { createContext } from "./context";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -79,6 +79,7 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`[api] server listening on port ${port}`);
+    void hydratePersistedTelegramMonitors().then((count) => console.log(`[telegram] restored ${count} persisted monitor(s)`)).catch((error) => console.error("[telegram] restore failed", error));
   });
 }
 

@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, telegramSettings, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,15 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+export async function getTelegramSettingsRow(connectionKey: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(telegramSettings).where(eq(telegramSettings.connectionKey, connectionKey)).limit(1);
+  return rows[0];
+}
+export async function upsertTelegramSettingsRow(connectionKey: string, payload: string) {
+  const db = await getDb();
+  if (!db) return false;
+  await db.insert(telegramSettings).values({ connectionKey, payload }).onDuplicateKeyUpdate({ set: { payload, updatedAt: new Date() } });
+  return true;
+}
