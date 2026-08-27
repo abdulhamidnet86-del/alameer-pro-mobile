@@ -85,6 +85,7 @@ const config: ExpoConfig = {
     favicon: "./assets/images/favicon.png",
   },
   plugins: [
+    "./plugins/with-fixed-rtl",
     "expo-router",
     [
       "expo-font",
