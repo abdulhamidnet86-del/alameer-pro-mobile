@@ -3,6 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { RouterOsClient } from "./routeros";
+import { escapeTelegramHtml, sendTelegramDocument, sendTelegramMessage, telegramStatus } from "./telegram";
 import { z } from "zod";
 
 const resourcePaths = {
@@ -70,6 +71,14 @@ export const appRouter = router({
         const [path, proplist] = paths[input.tool];
         return { tool: input.tool, rows: await api.print(path, proplist) };
       }),
+    }),
+    telegram: router({
+      status: publicProcedure.query(() => telegramStatus()),
+      test: publicProcedure.mutation(async () => { await sendTelegramMessage("<b>ALAMEER PRO</b>\nتم إرسال رسالة اختبار Telegram بنجاح."); return { success: true }; }),
+      report: publicProcedure.input(z.object({ title: z.string().max(120), text: z.string().max(12000) })).mutation(async ({ input }) => { await sendTelegramMessage(`<b>${escapeTelegramHtml(input.title)}</b>\n${escapeTelegramHtml(input.text)}`); return { success: true }; }),
+      cards: publicProcedure.input(z.object({ kind: z.enum(["usermanager", "hotspot"]), cards: z.array(z.object({ username: z.string().max(128), password: z.string().max(128), profile: z.string().max(128).optional(), expires: z.string().max(64).optional() })).min(1).max(100) })).mutation(async ({ input }) => { const title = input.kind === "hotspot" ? "بطاقات Hotspot" : "بطاقات User Manager"; const text = input.cards.map((card, index) => `${index + 1}. المستخدم: ${card.username}\nكلمة المرور: ${card.password}${card.profile ? `\nالباقة: ${card.profile}` : ""}${card.expires ? `\nالانتهاء: ${card.expires}` : ""}`).join("\n\n"); await sendTelegramMessage(`<b>${title}</b>\n${escapeTelegramHtml(text)}`); return { success: true, count: input.cards.length }; }),
+      document: publicProcedure.input(z.object({ filename: z.string().regex(/^[a-zA-Z0-9._-]+$/).max(120), base64: z.string().min(1).max(9000000), caption: z.string().max(1000).optional() })).mutation(async ({ input }) => { await sendTelegramDocument(Buffer.from(input.base64, "base64"), input.filename, input.caption); return { success: true }; }),
+      notifyCurrent: publicProcedure.input(connectionSchema).mutation(async ({ input }) => { const api = client(input); const [activeHotspot, activeSessions, users] = await Promise.all([api.print("/ip/hotspot/active", "user,address,uptime"), api.print("/user-manager/session", "user,active,status"), api.print("/user-manager/user", "username,disabled")]); const active = activeHotspot.length + activeSessions.filter((row) => row.active === "yes" || row.status === "active").length; const enabledUsers = users.filter((row) => row.disabled !== "true").length; await sendTelegramMessage(`<b>تحديث ALAMEER PRO</b>\nالمستخدمون الفعّالون: ${active}\nمستخدمو User Manager: ${enabledUsers}\nوقت المزامنة: ${new Date().toLocaleString("ar-YE")}\nالراوتر: ${escapeTelegramHtml(input.host)}`); return { success: true, active, enabledUsers }; }),
     }),
     packages: router({
       list: publicProcedure.input(connectionSchema).query(async ({ input }) => {
