@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import Constants from "expo-constants";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Animated, Linking, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -18,6 +19,8 @@ export default function RoutersScreen() {
   const [status, setStatus] = useState("اختر راوترًا محفوظًا ثم اضغط تسجيل الدخول لتعبئة بيانات الاتصال.");
   const appearance = useRef(new Animated.Value(0)).current;
   const statusMutation = trpc.routeros.status.useMutation();
+  const appVersion = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? "1.0.0";
+  const isDark = colorScheme === "dark";
 
   const refresh = async () => { setLoading(true); try { const items = await loadSavedRouters(); setRouters(items); setSelectedId((id) => items.some((item) => item.id === id) ? id : null); } finally { setLoading(false); } };
   useEffect(() => { void refresh(); Animated.timing(appearance, { toValue: 1, duration: 300, useNativeDriver: true }).start(); }, [appearance]);
@@ -33,15 +36,13 @@ export default function RoutersScreen() {
   const deleteRouter = (item: StoredRouter) => Alert.alert("حذف الراوتر", `هل تريد إزالة «${item.name}» من هذا الجهاز؟`, [{ text: "إلغاء", style: "cancel" }, { text: "حذف", style: "destructive", onPress: async () => { const next = routers.filter((candidate) => candidate.id !== item.id); await saveSavedRouters(next); setRouters(next); if (selectedId === item.id) setSelectedId(null); setStatus("تم حذف الراوتر المحفوظ من الجهاز."); } }]);
   const openSupport = (url: string) => Linking.openURL(url).catch(() => Alert.alert("تعذر فتح الرابط", "تحقق من وجود تطبيق الهاتف أو WhatsApp على جهازك."));
 
-  return <ScreenContainer edges={["top", "left", "right", "bottom"]} containerClassName="bg-[#F8FAFF]" className="px-3">
+  return <ScreenContainer edges={["top", "left", "right", "bottom"]} containerClassName={isDark ? "bg-[#06132C]" : "bg-[#F8FAFF]"} className="px-0">
+    <LinearGradient colors={["#E9142F", "#1559D8", "#0C2D85"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+      <View style={styles.heroShine} /><View style={styles.logoBox}><MaterialCommunityIcons name="router-wireless" size={33} color="#FFFFFF" /></View><View style={styles.brandWrap}><Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={styles.brand}>ALAMEER <Text style={styles.brandRed}>PRO</Text></Text><Text numberOfLines={1} style={styles.developer}>برمجة/ عبدالحميد داوؤد</Text></View><View style={styles.heroActions}><TouchableOpacity style={styles.circleAction}><MaterialCommunityIcons name="web" size={22} color="#0A3EA6" /></TouchableOpacity><TouchableOpacity style={styles.circleAction} onPress={() => setColorScheme(colorScheme === "dark" ? "light" : "dark")}><MaterialCommunityIcons name={colorScheme === "dark" ? "white-balance-sunny" : "weather-night"} size={22} color="#0A3EA6" /></TouchableOpacity><View style={styles.version}><Text style={styles.versionText}>v{appVersion}</Text></View></View>
+    </LinearGradient>
+    <View style={styles.tabs}><TouchableOpacity style={styles.tab} activeOpacity={0.8} onPress={() => router.replace("/connect" as any)}><MaterialCommunityIcons name="login" size={22} color="#123F95" /><Text style={styles.tabText}>بيانات الدخول</Text></TouchableOpacity><TouchableOpacity style={styles.activeTab} activeOpacity={0.85}><MaterialCommunityIcons name="router-wireless" size={22} color="white" /><Text style={styles.activeTabText}>الراوترات المسجلة</Text></TouchableOpacity></View>
     <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
       <Animated.View style={{ opacity: appearance, transform: [{ translateY: appearance.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }}>
-        <LinearGradient colors={["#E9142F", "#1559D8", "#0C2D85"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-          <View style={styles.heroShine} /><View style={styles.logoBox}><MaterialCommunityIcons name="router-wireless" size={33} color="#FFFFFF" /></View><View style={styles.brandWrap}><Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={styles.brand}>ALAMEER <Text style={styles.brandRed}>PRO</Text></Text><Text numberOfLines={1} style={styles.developer}>برمجة/ عبدالحميد داوؤد</Text></View><View style={styles.heroActions}><TouchableOpacity style={styles.circleAction}><MaterialCommunityIcons name="web" size={22} color="#0A3EA6" /></TouchableOpacity><TouchableOpacity style={styles.circleAction} onPress={() => setColorScheme(colorScheme === "dark" ? "light" : "dark")}><MaterialCommunityIcons name={colorScheme === "dark" ? "white-balance-sunny" : "weather-night"} size={22} color="#0A3EA6" /></TouchableOpacity><View style={styles.version}><Text style={styles.versionText}>v1.0.34</Text></View></View>
-        </LinearGradient>
-
-        <View style={styles.tabs}><TouchableOpacity style={styles.tab} activeOpacity={0.8} onPress={() => router.replace("/connect" as any)}><MaterialCommunityIcons name="login" size={22} color="#123F95" /><Text style={styles.tabText}>بيانات الدخول</Text></TouchableOpacity><TouchableOpacity style={styles.activeTab} activeOpacity={0.85}><MaterialCommunityIcons name="router-wireless" size={22} color="white" /><Text style={styles.activeTabText}>الراوترات المسجلة</Text></TouchableOpacity></View>
-
         <View style={styles.titleRow}><Text style={styles.title}>الراوترات المسجلة</Text><View style={styles.redLine} /></View>
         <View style={styles.tools}><TouchableOpacity style={styles.tool} onPress={() => router.replace("/connect" as any)} activeOpacity={0.75}><MaterialCommunityIcons name="plus" size={31} color="#1557D8" /></TouchableOpacity><TouchableOpacity style={styles.tool} onPress={() => void refresh()} activeOpacity={0.75}><MaterialCommunityIcons name="refresh" size={26} color="#1557D8" /></TouchableOpacity><Text style={styles.toolsHint}>{routers.length} راوتر محفوظ</Text></View>
 
