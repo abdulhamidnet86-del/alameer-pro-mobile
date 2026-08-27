@@ -16,6 +16,27 @@ const paramsSchema = z.record(z.string(), z.string()).refine((params) => Object.
 const powerSchema = z.enum(["reboot", "shutdown"]);
 const packageSchema = z.object({ name: z.string().min(1).max(64), nameForUsers: z.string().max(64).optional(), price: z.string().max(32), validity: z.string().max(32), startsWhen: z.enum(["assigned", "first-auth"]).default("assigned"), comment: z.string().max(255).optional(), downloadLimit: z.string().max(32).optional(), uploadLimit: z.string().max(32).optional(), transferLimit: z.string().max(32).optional(), uptimeLimit: z.string().max(32).optional(), limitationName: z.string().max(80).optional() });
 const packageUpdateSchema = packageSchema.extend({ profileId: z.string().min(1).max(100), limitationId: z.string().min(1).max(100), originalName: z.string().min(1).max(64), originalLimitationName: z.string().min(1).max(80) });
+const telegramEventsSchema = z.object({ dhcp: z.boolean(), hotspot: z.boolean(), backup: z.boolean(), sales: z.boolean(), netwatch: z.boolean(), router: z.boolean(), electricity: z.boolean() });
+const monitorState = new Map<string, string>();
+const monitorTimers = new Map<string, ReturnType<typeof setInterval>>();
+type RouterConnection = z.infer<typeof connectionSchema>;
+type TelegramEvents = z.infer<typeof telegramEventsSchema>;
+function monitorKey(connection: RouterConnection) { return `${connection.host}:${connection.port}`; }
+async function pollMonitor(connection: RouterConnection, events: TelegramEvents) {
+  const key = monitorKey(connection);
+  try {
+    const api = client(connection); const [netwatch, activeHotspot, sessions, resources] = await Promise.all([api.print("/tool/netwatch", "host,status,comment"), api.print("/ip/hotspot/active", "user,address"), api.print("/user-manager/session", "user,active,status"), api.print("/system/resource", "version,uptime,cpu-load,free-memory,total-memory")]);
+    const activeSessions = sessions.filter((row) => row.active === "yes" || row.status === "active").length;
+    const state = JSON.stringify({ online: true, netwatch: events.netwatch ? netwatch.map((row) => `${row.host}:${row.status}`).sort() : [], hotspot: events.hotspot ? activeHotspot.length : undefined, sessions: events.hotspot ? activeSessions : undefined, resources: events.router ? resources[0] : undefined });
+    const previous = monitorState.get(key); monitorState.set(key, state); const changed = previous !== undefined && previous !== state;
+    if (changed) await sendTelegramMessage(`<b>تحديث مراقبة RouterOS</b>\nأجهزة Netwatch: ${netwatch.length}\nالمتصلون Hotspot: ${activeHotspot.length}\nالجلسات النشطة: ${activeSessions}\nحالة الراوتر: ${resources[0]?.uptime || "متصل"}\nتم الإرسال بعد تغير الحالة مع منع التكرار.`);
+    return { success: true, changed, online: true, netwatch, active: activeHotspot.length, sessions: activeSessions, resources: resources[0] ?? {} };
+  } catch (error) {
+    const offlineState = JSON.stringify({ online: false }); const previous = monitorState.get(key); monitorState.set(key, offlineState); const changed = previous !== offlineState;
+    if (changed && (events.electricity || events.router)) await sendTelegramMessage(`<b>تنبيه مراقبة RouterOS</b>\nتعذر الوصول إلى الراوتر: ${escapeTelegramHtml(connection.host)}\nالسبب: ${escapeTelegramHtml(error instanceof Error ? error.message : "انقطاع أو انتهاء المهلة")}\nسيتم إرسال إشعار العودة عند استعادة الاتصال.`);
+    return { success: false, changed, online: false, netwatch: [], active: 0, sessions: 0, resources: {}, error: "offline" };
+  }
+}
 const dashboardToolSchema = z.enum(["ping", "interfaces", "ip-addresses", "dhcp-leases", "dhcp-server", "nat", "dns", "arp", "firewall-filter", "mangle", "layer7", "connections", "neighbors", "logs", "resources", "traffic", "routerboard", "device-health", "hotspot-users", "hotspot-active", "usermanager-users", "system-users", "queues", "ppp-users", "router-files", "netwatch", "hotspot-html-files", "bluetooth"]);
 type Resource = z.infer<typeof resourceSchema>;
 const financeFiltersSchema = z.object({ connection: connectionSchema, fromDate: z.string().optional(), toDate: z.string().optional(), profile: z.string().optional(), nas: z.string().optional(), status: z.string().optional() });
@@ -79,6 +100,10 @@ export const appRouter = router({
       cards: publicProcedure.input(z.object({ kind: z.enum(["usermanager", "hotspot"]), cards: z.array(z.object({ username: z.string().max(128), password: z.string().max(128), profile: z.string().max(128).optional(), expires: z.string().max(64).optional() })).min(1).max(100) })).mutation(async ({ input }) => { const title = input.kind === "hotspot" ? "بطاقات Hotspot" : "بطاقات User Manager"; const text = input.cards.map((card, index) => `${index + 1}. المستخدم: ${card.username}\nكلمة المرور: ${card.password}${card.profile ? `\nالباقة: ${card.profile}` : ""}${card.expires ? `\nالانتهاء: ${card.expires}` : ""}`).join("\n\n"); await sendTelegramMessage(`<b>${title}</b>\n${escapeTelegramHtml(text)}`); return { success: true, count: input.cards.length }; }),
       document: publicProcedure.input(z.object({ filename: z.string().regex(/^[a-zA-Z0-9._-]+$/).max(120), base64: z.string().min(1).max(9000000), caption: z.string().max(1000).optional() })).mutation(async ({ input }) => { await sendTelegramDocument(Buffer.from(input.base64, "base64"), input.filename, input.caption); return { success: true }; }),
       notifyCurrent: publicProcedure.input(connectionSchema).mutation(async ({ input }) => { const api = client(input); const [activeHotspot, activeSessions, users] = await Promise.all([api.print("/ip/hotspot/active", "user,address,uptime"), api.print("/user-manager/session", "user,active,status"), api.print("/user-manager/user", "username,disabled")]); const active = activeHotspot.length + activeSessions.filter((row) => row.active === "yes" || row.status === "active").length; const enabledUsers = users.filter((row) => row.disabled !== "true").length; await sendTelegramMessage(`<b>تحديث ALAMEER PRO</b>\nالمستخدمون الفعّالون: ${active}\nمستخدمو User Manager: ${enabledUsers}\nوقت المزامنة: ${new Date().toLocaleString("ar-YE")}\nالراوتر: ${escapeTelegramHtml(input.host)}`); return { success: true, active, enabledUsers }; }),
+      eventTest: publicProcedure.input(z.object({ event: z.string().min(1).max(80) })).mutation(async ({ input }) => { await sendTelegramMessage(`<b>تجربة ميزة Telegram</b>\nتم تشغيل تجربة: ${escapeTelegramHtml(input.event)}\nالوقت: ${new Date().toLocaleString("ar-YE")}`); return { success: true }; }),
+      monitorNow: publicProcedure.input(z.object({ connection: connectionSchema, events: telegramEventsSchema })).mutation(({ input }) => pollMonitor(input.connection, input.events)),
+      startMonitor: publicProcedure.input(z.object({ connection: connectionSchema, events: telegramEventsSchema, intervalSeconds: z.number().int().min(60).max(86400) })).mutation(async ({ input }) => { const key = monitorKey(input.connection); const existing = monitorTimers.get(key); if (existing) clearInterval(existing); await pollMonitor(input.connection, input.events); const timer = setInterval(() => { void pollMonitor(input.connection, input.events); }, input.intervalSeconds * 1000); monitorTimers.set(key, timer); return { success: true, intervalSeconds: input.intervalSeconds }; }),
+      stopMonitor: publicProcedure.input(connectionSchema).mutation(({ input }) => { const key = monitorKey(input); const existing = monitorTimers.get(key); if (existing) clearInterval(existing); monitorTimers.delete(key); return { success: true }; }),
     }),
     packages: router({
       list: publicProcedure.input(connectionSchema).query(async ({ input }) => {
