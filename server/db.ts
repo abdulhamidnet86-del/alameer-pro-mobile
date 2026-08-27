@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, telegramSettings, users } from "../drizzle/schema";
+import { CardDesignRow, InsertCardDesign, InsertUser, cardDesigns, telegramSettings, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,6 +89,20 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function listCardDesignRows(connectionKey: string) {
+  const db = await getDb(); if (!db) return [] as CardDesignRow[];
+  return db.select().from(cardDesigns).where(eq(cardDesigns.connectionKey, connectionKey));
+}
+export async function upsertCardDesignRow(row: InsertCardDesign) {
+  const db = await getDb(); if (!db) return false;
+  const existing = await db.select().from(cardDesigns).where(and(eq(cardDesigns.connectionKey, row.connectionKey), eq(cardDesigns.designKey, row.designKey))).limit(1);
+  if (existing[0]) { await db.update(cardDesigns).set({ name: row.name, category: row.category, payload: row.payload, updatedAt: new Date() }).where(and(eq(cardDesigns.connectionKey, row.connectionKey), eq(cardDesigns.designKey, row.designKey))); }
+  else { await db.insert(cardDesigns).values({ connectionKey: row.connectionKey, designKey: row.designKey, name: row.name, category: row.category, payload: row.payload }); }
+  return true;
+}
+export async function deleteCardDesignRow(connectionKey: string, designKey: string) {
+  const db = await getDb(); if (!db) return false; await db.delete(cardDesigns).where(and(eq(cardDesigns.connectionKey, connectionKey), eq(cardDesigns.designKey, designKey))); return true;
+}
 export async function getTelegramSettingsRow(connectionKey: string) {
   const db = await getDb();
   if (!db) return undefined;

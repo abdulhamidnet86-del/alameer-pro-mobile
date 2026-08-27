@@ -1,11 +1,12 @@
 import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { deleteCardDesignRow, listCardDesignRows, upsertCardDesignRow } from "./db";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { RouterOsClient } from "./routeros";
 import { escapeTelegramHtml, sendTelegramDocument, sendTelegramMessage, telegramStatus } from "./telegram";
 import { z } from "zod";
-import { defaultTelegramSettings, listPersistedMonitors, loadTelegramSettings, publicTelegramSettings, revealTelegramBot, saveTelegramSettings, type ScheduleMode, type TelegramBot } from "./telegram-settings";
+import { defaultTelegramSettings, keyFor, listPersistedMonitors, loadTelegramSettings, publicTelegramSettings, revealTelegramBot, saveTelegramSettings, type ScheduleMode, type TelegramBot } from "./telegram-settings";
 
 const resourcePaths = {
   usermanager: { users: "/user-manager/user", profiles: "/user-manager/profile", sessions: "/user-manager/session" },
@@ -21,6 +22,7 @@ const telegramEventsSchema = z.object({ dhcp: z.boolean(), hotspot: z.boolean(),
 const telegramScheduleSchema = z.object({ mode: z.enum(["instant", "hourly", "threeHourly", "daily", "custom"]), customMinutes: z.number().int().min(5).max(10080).optional() });
 const telegramBotInputSchema = z.object({ id: z.string().min(1).max(80), name: z.string().min(1).max(80), token: z.string().max(512).optional(), chatId: z.string().max(128).optional(), enabled: z.boolean() });
 const telegramSettingsInputSchema = z.object({ connection: connectionSchema, bots: z.array(telegramBotInputSchema).max(20), events: telegramEventsSchema, schedules: z.object({ dhcp: telegramScheduleSchema, hotspot: telegramScheduleSchema, backup: telegramScheduleSchema, sales: telegramScheduleSchema, netwatch: telegramScheduleSchema, router: telegramScheduleSchema, electricity: telegramScheduleSchema }), monitorIntervalSeconds: z.number().int().min(60).max(86400), monitorEnabled: z.boolean(), customFeatures: z.array(z.object({ id: z.string().min(1).max(80), name: z.string().min(1).max(100), description: z.string().max(500), command: z.string().min(1).max(500), enabled: z.boolean() })).max(30) });
+const cardDesignSchema = z.object({ designKey: z.string().min(1).max(80), name: z.string().min(1).max(120), category: z.string().min(1).max(80), payload: z.string().min(2).max(9000000) });
 const monitorState = new Map<string, string>();
 const monitorLastSent = new Map<string, number>();
 const monitorTimers = new Map<string, ReturnType<typeof setInterval>>();
@@ -108,6 +110,11 @@ export const appRouter = router({
         const [path, proplist] = paths[input.tool];
         return { tool: input.tool, rows: await api.print(path, proplist) };
       }),
+    }),
+    cards: router({
+      list: publicProcedure.input(connectionSchema).query(async ({ input }) => { const rows = await listCardDesignRows(keyFor(input)); return rows.map((row) => ({ designKey: row.designKey, name: row.name, category: row.category, payload: JSON.parse(row.payload), updatedAt: row.updatedAt })); }),
+      save: publicProcedure.input(z.object({ connection: connectionSchema, design: cardDesignSchema })).mutation(async ({ input }) => { const persisted = await upsertCardDesignRow({ connectionKey: keyFor(input.connection), ...input.design }); return { success: true, persisted }; }),
+      remove: publicProcedure.input(z.object({ connection: connectionSchema, designKey: z.string().min(1).max(80) })).mutation(async ({ input }) => ({ success: await deleteCardDesignRow(keyFor(input.connection), input.designKey) })),
     }),
     telegram: router({
       status: publicProcedure.query(() => telegramStatus()),

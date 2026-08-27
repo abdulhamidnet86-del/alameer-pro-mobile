@@ -34,3 +34,16 @@ export const telegramSettings = mysqlTable("telegram_settings", {
 });
 export type TelegramSettingsRow = typeof telegramSettings.$inferSelect;
 export type InsertTelegramSettings = typeof telegramSettings.$inferInsert;
+
+export const cardDesigns = mysqlTable("card_designs", {
+  id: int("id").autoincrement().primaryKey(),
+  connectionKey: varchar("connectionKey", { length: 64 }).notNull(),
+  designKey: varchar("designKey", { length: 80 }).notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  category: varchar("category", { length: 80 }).notNull().default("عام"),
+  payload: text("payload").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CardDesignRow = typeof cardDesigns.$inferSelect;
+export type InsertCardDesign = typeof cardDesigns.$inferInsert;
