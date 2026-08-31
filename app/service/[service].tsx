@@ -19,7 +19,7 @@ export default function ServiceScreen() {
   const colors = useColors(colorScheme);
   const [powerVisible, setPowerVisible] = useState(false);
   const exitToConnection = () => router.replace("/connect" as any);
-  const openAction = (item: string) => { if (service === "usermanager" && item === "إدارة الباقات") router.push("/service/packages" as any); };
+  const openAction = (item: string) => { if (item === "إضافة كرت") { router.push(`/service/add-card?kind=${service === "hotspot" ? "hotspot" : "usermanager"}` as any); return; } if (service === "usermanager" && item === "إدارة الباقات") router.push("/service/packages" as any); };
   return <ScreenContainer edges={["top", "left", "right", "bottom"]} containerClassName={colorScheme === "dark" ? "bg-[#101A2E]" : "bg-[#F8FAFF]"} className="px-4">
     <View style={[styles.top, { backgroundColor: colors.surface, borderColor: colors.border } ]}><View style={styles.actions}><Small icon="web" /><Small icon="weather-night" onPress={() => setColorScheme(colorScheme === "dark" ? "light" : "dark")} /><Small icon="logout" onPress={exitToConnection} /><Small icon="power" onPress={() => setPowerVisible(true)} /></View><View style={styles.brand}><Text style={styles.brandBlue}>ALAMEER <Text style={styles.brandRed}>PRO</Text></Text><View style={styles.online}><View style={styles.dot} /><Text style={styles.onlineText}>متصل</Text></View></View><TouchableOpacity style={styles.back} onPress={() => router.back()}><MaterialCommunityIcons name="arrow-right" size={24} color="#123F95" /></TouchableOpacity></View>
     <Text style={[styles.title, { color: colors.foreground }]}>{data.title}</Text><Text style={[styles.subtitle, { color: colors.muted }]}>إجراءات سريعة</Text>
